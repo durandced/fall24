@@ -1,4 +1,4 @@
-use std::{io, process::exit};
+use std::{fmt::format, io, process::exit};
 
 macro_rules! parse_input {
     ($x:expr, $t:ident) => {
@@ -9,10 +9,10 @@ macro_rules! parse_input {
 // #[derive(Default)]
 #[derive(Debug)]
 struct Creature {
-    _id: i32,
+    id: i32,
     _color: i32,
     _ctype: i32,
-    _discovered: bool,
+    discovered: bool,
     x: i32,
     y: i32,
     vx: i32,
@@ -22,10 +22,10 @@ struct Creature {
 impl Creature {
     fn init(id: i32, color: i32, ctype: i32) -> Creature {
         Creature {
-            _id: id,
+            id,
             _color: color,
             _ctype: ctype,
-            _discovered: false,
+            discovered: false,
             x: 0,
             y: 0,
             vx: 0,
@@ -68,7 +68,7 @@ impl Board {
 
     fn update_creature(&mut self, id: i32, x: i32, y: i32, vx: i32, vy: i32) {
         for c in self.creatures.iter_mut() {
-            if c._id == id {
+            if c.id == id {
                 c.x = x;
                 c.y = y;
                 c.vx = vx;
@@ -177,6 +177,12 @@ impl Ia {
         }
     }
 
+    fn dist_between_drone_and_creature(&self, drone_id: usize, c: &Creature) -> i32 {
+        let dx = self.my_drones[drone_id]._drone_x - c.x;
+        let dy = self.my_drones[drone_id]._drone_y - c.y;
+        return f64::sqrt((dx * dx + dy * dy) as f64) as i32;
+    }
+
     fn update(&mut self) {
         let mut input_line = String::new();
         io::stdin().read_line(&mut input_line).unwrap();
@@ -198,6 +204,12 @@ impl Ia {
             io::stdin().read_line(&mut input_line).unwrap();
             self.my_scanned_creatures_ids
                 .push(parse_input!(input_line, i32));
+            for c in self.board.creatures.iter_mut() {
+                if c.id == self.my_scanned_creatures_ids.last().unwrap().clone() {
+                    c.discovered = true;
+                    break;
+                }
+            }
         }
 
         let mut input_line = String::new();
@@ -282,6 +294,48 @@ impl Ia {
             ));
         }
     }
+
+    fn decide_move(&mut self, drone_id: usize) -> String {
+        let (mut move_to_x, mut move_to_y) = (0, 0);
+        let mut closest_move = 100000;
+
+        for c in self.board.creatures.iter() {
+            if !c.discovered {
+                let dist = self.dist_between_drone_and_creature(drone_id, c);
+                if dist < closest_move {
+                    closest_move = dist;
+                    move_to_x = c.x;
+                    move_to_y = c.y;
+                }
+                eprintln!("closest move to {:#?} is {}", c, closest_move)
+            }
+        }
+        return format!("MOVE {} {}", move_to_x, move_to_y);
+    }
+
+    fn decide_scan(&mut self, drone_id: usize) -> String {
+        let mut id = 0;
+        for c in self.board.creatures.iter() {
+            if c.discovered {
+                continue;
+            }
+            let dist = self.dist_between_drone_and_creature(drone_id, c);
+            if dist <= 2000 && dist > 800 {
+                id = 1;
+                eprintln!(
+                    "Scan to get creature {:#?} with drone {:#?}",
+                    c, self.my_drones[drone_id]
+                );
+                break;
+            }
+        }
+        return format!("{}", id);
+    }
+
+    fn play_drone(&mut self, i: usize) {
+        eprintln!("Playing drone {} - {:#?}", i, self.my_drones[i]);
+        println!("{} {}", self.decide_move(i), self.decide_scan(i));
+    }
 }
 
 /**
@@ -293,18 +347,15 @@ fn main() {
     // eprintln!("{}", input_line);
     let mut ia = Ia::init(Board::new(input_line));
 
-    eprintln!("Board initialization done {:?}", ia.board);
-
     // game loop
     loop {
         ia.update();
         eprintln!("Ia update done : \n{:#?}", ia);
 
-        for _i in 0..ia.my_drone_cnt as usize {
+        for i in 0..ia.my_drone_cnt as usize {
             // Write an action using println!("message...");
             // To debug: eprintln!("Debug message...");
-
-            println!("WAIT 1"); // MOVE <x> <y> <light (1|0)> | WAIT <light (1|0)>
+            ia.play_drone(i);
         }
     }
 }
